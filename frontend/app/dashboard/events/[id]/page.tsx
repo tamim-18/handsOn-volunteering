@@ -36,6 +36,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
+import { EventFeedback } from "@/components/EventFeedback";
 
 interface Event {
   _id: string;
@@ -509,6 +510,28 @@ export default function EventDetailsPage({
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Add Feedback Section */}
+      <div className="space-y-8">
+        {/* Event Details Tab */}
+        {activeTab === "details" && (
+          <div className="space-y-8">
+            {/* ... existing event details code ... */}
+
+            {/* Add Feedback Section */}
+            <div className="mt-8">
+              <EventFeedback
+                eventId={params.id}
+                isParticipant={
+                  event?.participants.includes(currentUser._id) || false
+                }
+              />
+            </div>
+          </div>
+        )}
+
+        {/* ... existing participants tab code ... */}
       </div>
     </div>
   );

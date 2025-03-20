@@ -21,6 +21,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { PageLayout } from "@/components/layout/PageLayout";
+import { Card } from "@/components/ui/card";
 
 interface Event {
   _id: string;
@@ -94,27 +96,35 @@ const EventCard = ({
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-card rounded-lg shadow-md overflow-hidden"
+      className="group relative bg-card rounded-xl overflow-hidden border shadow-sm hover:shadow-md transition-all duration-300"
     >
       {event.image && (
-        <div className="relative h-48">
+        <div className="relative h-48 overflow-hidden">
           <img
             src={event.image}
             alt={event.title}
-            className="w-full h-full object-cover"
+            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
             onError={(e) => {
               const target = e.target as HTMLImageElement;
               target.src = "https://via.placeholder.com/400x200?text=No+Image";
             }}
           />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
         </div>
       )}
       <div className="p-6 space-y-4">
         <div className="flex items-start justify-between">
           <div>
-            <h3 className="text-xl font-semibold">{event.title}</h3>
+            <h3 className="text-xl font-semibold group-hover:text-primary transition-colors duration-300">
+              {event.title}
+            </h3>
             <div className="flex items-center gap-2 mt-1">
-              <Badge variant="outline">{event.category}</Badge>
+              <Badge
+                variant="outline"
+                className="bg-background/50 backdrop-blur-sm"
+              >
+                {event.category}
+              </Badge>
               <Badge
                 variant={
                   event.status === "upcoming"
@@ -125,6 +135,7 @@ const EventCard = ({
                     ? "secondary"
                     : "destructive"
                 }
+                className="bg-background/50 backdrop-blur-sm"
               >
                 {event.status}
               </Badge>
@@ -135,7 +146,10 @@ const EventCard = ({
             size="sm"
             onClick={handleJoin}
             disabled={isButtonDisabled()}
-            className={cn("min-w-[100px]", isJoining && "animate-pulse")}
+            className={cn(
+              "min-w-[100px] transition-all duration-300",
+              isJoining && "animate-pulse"
+            )}
           >
             {isJoining ? (
               <div className="flex items-center gap-2">
@@ -148,7 +162,7 @@ const EventCard = ({
           </Button>
         </div>
 
-        <p className="text-muted-foreground line-clamp-2">
+        <p className="text-muted-foreground line-clamp-2 group-hover:text-foreground transition-colors duration-300">
           {event.description}
         </p>
 
@@ -192,7 +206,7 @@ export default function EventsPage() {
   const LoadingSkeleton = () => (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
       {[1, 2, 3, 4, 5, 6].map((i) => (
-        <div key={i} className="bg-card rounded-xl overflow-hidden shadow-sm">
+        <Card key={i} className="overflow-hidden">
           <Skeleton className="h-48 w-full" />
           <div className="p-6 space-y-4">
             <Skeleton className="h-4 w-24" />
@@ -201,93 +215,94 @@ export default function EventsPage() {
             <Skeleton className="h-4 w-full" />
             <Skeleton className="h-10 w-full" />
           </div>
-        </div>
+        </Card>
       ))}
     </div>
   );
 
   return (
-    <div className="space-y-8">
-      <div className="flex justify-between items-start">
-        <div>
-          <h1 className="text-3xl font-bold">Volunteer Events</h1>
-          <p className="text-muted-foreground mt-2">
-            Find and join meaningful volunteer opportunities in your community.
-          </p>
-        </div>
+    <PageLayout
+      title="Volunteer Events"
+      description="Find and join meaningful volunteer opportunities in your community"
+      actions={
         <Button onClick={() => router.push("/dashboard/events/create")}>
           <Plus className="h-4 w-4 mr-2" />
           Create Event
         </Button>
-      </div>
+      }
+    >
+      <div className="space-y-8">
+        {/* Search and Filter */}
+        <Card className="p-6">
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+              <Input
+                type="text"
+                placeholder="Search events..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+            <Button variant="outline" className="flex items-center gap-2">
+              <Filter className="h-5 w-5" />
+              Filters
+            </Button>
+          </div>
+        </Card>
 
-      {/* Search and Filter */}
-      <div className="flex flex-col sm:flex-row gap-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-          <Input
-            type="text"
-            placeholder="Search events..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10"
-          />
-        </div>
-        <Button variant="outline" className="flex items-center gap-2">
-          <Filter className="h-5 w-5" />
-          Filters
-        </Button>
-      </div>
-
-      {/* Categories */}
-      <ScrollArea className="w-full whitespace-nowrap rounded-md">
-        <div className="flex gap-2 p-2">
-          {categories.map((category, index) => (
-            <motion.button
-              key={category}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.05 }}
-              onClick={() => setSelectedCategory(category)}
-              className={`px-4 py-2 rounded-full whitespace-nowrap transition-colors ${
-                selectedCategory === category
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
-              }`}
-            >
-              {category}
-            </motion.button>
-          ))}
-        </div>
-      </ScrollArea>
-
-      {/* Events Grid */}
-      {loading ? (
-        <LoadingSkeleton />
-      ) : error ? (
-        <div className="text-center py-12">
-          <p className="text-destructive">{error}</p>
-          <Button
-            variant="outline"
-            className="mt-4"
-            onClick={() => window.location.reload()}
-          >
-            Try Again
-          </Button>
-        </div>
-      ) : events.length === 0 ? (
-        <div className="text-center py-12">
-          <p className="text-muted-foreground">No events found</p>
-        </div>
-      ) : (
-        <AnimatePresence>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {events.map((event, index) => (
-              <EventCard key={event._id} event={event} onJoin={joinEvent} />
+        {/* Categories */}
+        <ScrollArea className="w-full whitespace-nowrap rounded-md">
+          <div className="flex gap-2 p-2">
+            {categories.map((category, index) => (
+              <motion.button
+                key={category}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.05 }}
+                onClick={() => setSelectedCategory(category)}
+                className={cn(
+                  "px-4 py-2 rounded-full whitespace-nowrap transition-all duration-300",
+                  selectedCategory === category
+                    ? "bg-primary text-primary-foreground shadow-md"
+                    : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+                )}
+              >
+                {category}
+              </motion.button>
             ))}
           </div>
-        </AnimatePresence>
-      )}
-    </div>
+        </ScrollArea>
+
+        {/* Events Grid */}
+        {loading ? (
+          <LoadingSkeleton />
+        ) : error ? (
+          <Card className="p-6 text-center">
+            <p className="text-destructive">{error}</p>
+            <Button
+              variant="outline"
+              className="mt-4"
+              onClick={() => window.location.reload()}
+            >
+              Try Again
+            </Button>
+          </Card>
+        ) : events.length === 0 ? (
+          <Card className="p-6 text-center">
+            <p className="text-muted-foreground">No events found</p>
+          </Card>
+        ) : (
+          <AnimatePresence>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {events.map((event, index) => (
+                <EventCard key={event._id} event={event} onJoin={joinEvent} />
+              ))}
+            </div>
+          </AnimatePresence>
+        )}
+      </div>
+    </PageLayout>
   );
 }
