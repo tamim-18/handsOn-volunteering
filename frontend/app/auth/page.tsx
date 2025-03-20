@@ -4,9 +4,130 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { HandHeart, Mail, Lock, User } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+
+interface AuthFormData {
+  name: string;
+  email: string;
+  password: string;
+}
+
+interface FormErrors {
+  name?: string;
+  email?: string;
+  password?: string;
+}
 
 export default function AuthPage() {
+  const router = useRouter();
   const [isLogin, setIsLogin] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
+  const [errors, setErrors] = useState<FormErrors>({});
+  const [formData, setFormData] = useState<AuthFormData>({
+    name: "",
+    email: "",
+    password: "",
+  });
+
+  const validateForm = (): boolean => {
+    const newErrors: FormErrors = {};
+
+    if (!isLogin && !formData.name.trim()) {
+      newErrors.name = "Name is required";
+    }
+
+    if (!formData.email.trim()) {
+      newErrors.email = "Email is required";
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      newErrors.email = "Invalid email format";
+    }
+
+    if (!formData.password) {
+      newErrors.password = "Password is required";
+    } else if (formData.password.length < 6) {
+      newErrors.password = "Password must be at least 6 characters";
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+    // Clear error when user starts typing
+    if (errors[name as keyof FormErrors]) {
+      setErrors((prev) => ({
+        ...prev,
+        [name]: undefined,
+      }));
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!validateForm()) {
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      const endpoint = isLogin
+        ? "http://localhost:5000/api/auth/login"
+        : "http://localhost:5000/api/auth/register";
+
+      console.log("Submitting to:", endpoint);
+      console.log("Form data:", formData);
+
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(formData),
+      });
+
+      let data;
+      try {
+        data = await response.json();
+      } catch (parseError) {
+        console.error("Error parsing response:", parseError);
+        throw new Error("Invalid response from server");
+      }
+
+      console.log("Response data:", data);
+
+      if (!response.ok) {
+        throw new Error(data.message || "Authentication failed");
+      }
+
+      if (!data.data || !data.data.token) {
+        throw new Error("Invalid response format");
+      }
+
+      // Store token and user data
+      localStorage.setItem("token", data.data.token);
+      localStorage.setItem("user", JSON.stringify(data.data.user));
+
+      toast.success(isLogin ? "Login successful!" : "Registration successful!");
+
+      // Redirect to dashboard
+      router.push("/dashboard");
+    } catch (error) {
+      console.error("Auth error:", error);
+      toast.error(
+        error instanceof Error ? error.message : "Authentication failed"
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/5 via-secondary/5 to-primary/5 flex items-center justify-center p-4">
@@ -26,8 +147,8 @@ export default function AuthPage() {
             Make a Difference in Your Community
           </h2>
           <p className="text-muted-foreground">
-            Join thousands of volunteers creating positive change. Connect, contribute, and track your
-            social impact journey with HandsOn.
+            Join thousands of volunteers creating positive change. Connect,
+            contribute, and track your social impact journey with HandsOn.
           </p>
         </motion.div>
 
@@ -43,7 +164,9 @@ export default function AuthPage() {
               onClick={() => setIsLogin(true)}
               className={cn(
                 "flex-1 p-3 rounded-lg transition-all",
-                isLogin ? "bg-primary text-primary-foreground" : "hover:bg-muted"
+                isLogin
+                  ? "bg-primary text-primary-foreground"
+                  : "hover:bg-muted"
               )}
             >
               Login
@@ -52,14 +175,16 @@ export default function AuthPage() {
               onClick={() => setIsLogin(false)}
               className={cn(
                 "flex-1 p-3 rounded-lg transition-all",
-                !isLogin ? "bg-primary text-primary-foreground" : "hover:bg-muted"
+                !isLogin
+                  ? "bg-primary text-primary-foreground"
+                  : "hover:bg-muted"
               )}
             >
               Sign Up
             </button>
           </div>
 
-          <form onSubmit={(e) => e.preventDefault()} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4">
             {!isLogin && (
               <div className="space-y-2">
                 <label className="text-sm font-medium">Full Name</label>
@@ -67,10 +192,20 @@ export default function AuthPage() {
                   <User className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                   <input
                     type="text"
+                    name="name"
+                    value={formData.name}
+                    onChange={handleInputChange}
                     placeholder="John Doe"
-                    className="w-full pl-10 pr-4 py-2 rounded-lg border bg-background"
+                    className={cn(
+                      "w-full pl-10 pr-4 py-2 rounded-lg border bg-background",
+                      errors.name && "border-red-500"
+                    )}
+                    required
                   />
                 </div>
+                {errors.name && (
+                  <p className="text-sm text-red-500">{errors.name}</p>
+                )}
               </div>
             )}
 
@@ -80,10 +215,20 @@ export default function AuthPage() {
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                 <input
                   type="email"
+                  name="email"
+                  value={formData.email}
+                  onChange={handleInputChange}
                   placeholder="you@example.com"
-                  className="w-full pl-10 pr-4 py-2 rounded-lg border bg-background"
+                  className={cn(
+                    "w-full pl-10 pr-4 py-2 rounded-lg border bg-background",
+                    errors.email && "border-red-500"
+                  )}
+                  required
                 />
               </div>
+              {errors.email && (
+                <p className="text-sm text-red-500">{errors.email}</p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -92,14 +237,32 @@ export default function AuthPage() {
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                 <input
                   type="password"
+                  name="password"
+                  value={formData.password}
+                  onChange={handleInputChange}
                   placeholder="••••••••"
-                  className="w-full pl-10 pr-4 py-2 rounded-lg border bg-background"
+                  className={cn(
+                    "w-full pl-10 pr-4 py-2 rounded-lg border bg-background",
+                    errors.password && "border-red-500"
+                  )}
+                  required
                 />
               </div>
+              {errors.password && (
+                <p className="text-sm text-red-500">{errors.password}</p>
+              )}
             </div>
 
-            <button className="w-full bg-primary text-primary-foreground py-2 rounded-lg hover:opacity-90 transition-opacity">
-              {isLogin ? "Login" : "Create Account"}
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="w-full bg-primary text-primary-foreground py-2 rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isLoading
+                ? "Processing..."
+                : isLogin
+                ? "Login"
+                : "Create Account"}
             </button>
 
             {isLogin && (
