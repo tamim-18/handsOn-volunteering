@@ -1,240 +1,299 @@
-const Event = require('../models/Event');
-const mongoose = require('mongoose');
+const Event = require("../models/Event");
+const User = require("../models/User");
 
-// Create Event
-exports.createEvent = async (req, res) => {
-    try {
-        // Debug logs
-        console.log('1. Request body:', req.body);
-        console.log('2. Auth user:', req.user);
+// @desc    Create a new event
+// @route   POST /api/events
+// @access  Private
+const createEvent = async (req, res) => {
+  try {
+    const {
+      title,
+      description,
+      date,
+      time,
+      location,
+      category,
+      image,
+      maxParticipants,
+      requirements,
+      contactInfo,
+      isRecurring,
+      recurringDetails,
+    } = req.body;
 
-        if (!req.user || !req.user.userId) {
-            console.log('3. Authentication failed - no user ID');
-            return res.status(401).json({
-                success: false,
-                message: 'User not authenticated'
-            });
-        }
+    const event = await Event.create({
+      title,
+      description,
+      date,
+      time,
+      location,
+      category,
+      image,
+      maxParticipants,
+      requirements,
+      contactInfo,
+      isRecurring,
+      recurringDetails,
+      creator: req.user._id,
+    });
 
-        // Validate required fields
-        const { title, description, date, location, category } = req.body;
+    // Add event to user's created events
+    await User.findByIdAndUpdate(req.user._id, {
+      $push: { createdEvents: event._id },
+    });
 
-        if (!title || !description || !date || !location || !category) {
-            console.log('4. Missing required fields');
-            return res.status(400).json({
-                success: false,
-                message: 'All fields are required'
-            });
-        }
-
-        // Create event object
-        const eventData = {
-            title,
-            description,
-            date: new Date(date),
-            location,
-            category,
-            creator: req.user.userId,
-            participants: [req.user.userId]
-        };
-
-        console.log('5. Event data to be saved:', eventData);
-
-        // Create and save the event
-        const event = new Event(eventData);
-        console.log('6. Created event instance:', event);
-
-        const savedEvent = await event.save();
-        console.log('7. Saved event:', savedEvent);
-
-        // Populate creator details
-        await savedEvent.populate('creator', 'name email');
-        console.log('8. Populated event:', savedEvent);
-
-        return res.status(201).json({
-            success: true,
-            message: 'Event created successfully',
-            data: savedEvent
-        });
-
-    } catch (error) {
-        console.error('Detailed error:', {
-            message: error.message,
-            stack: error.stack,
-            name: error.name,
-            errors: error.errors
-        });
-
-        return res.status(500).json({
-            success: false,
-            message: 'Error creating event',
-            error: error.message,
-            details: error.errors
-        });
-    }
+    res.status(201).json({
+      success: true,
+      data: event,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
 };
 
-// Get all events
-exports.getAllEvents = async (req, res) => {
-    try {
-        const events = await Event.find()
-            .populate('creator', 'name email')
-            .populate('participants', 'name email')
-            .sort({ date: 1 });
+// @desc    Get all events with filters
+// @route   GET /api/events
+// @access  Public
+const getEvents = async (req, res) => {
+  try {
+    const { category, status, search, date, page = 1, limit = 10 } = req.query;
 
-        return res.status(200).json({
-            success: true,
-            data: events
-        });
-    } catch (error) {
-        console.error('Error fetching events:', error);
-        return res.status(500).json({
-            success: false,
-            message: 'Error fetching events',
-            error: error.message
-        });
+    const query = {};
+
+    // Apply filters
+    if (category) query.category = category;
+    if (status) query.status = status;
+    if (date) {
+      const startOfDay = new Date(date);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(date);
+      endOfDay.setHours(23, 59, 59, 999);
+      query.date = { $gte: startOfDay, $lte: endOfDay };
     }
+    if (search) {
+      query.$text = { $search: search };
+    }
+
+    // Get total count for pagination
+    const total = await Event.countDocuments(query);
+
+    // Get events with pagination
+    const events = await Event.find(query)
+      .populate("creator", "name email")
+      .populate("participants", "name email")
+      .sort({ date: 1 })
+      .skip((page - 1) * limit)
+      .limit(limit);
+
+    res.json({
+      success: true,
+      data: events,
+      pagination: {
+        total,
+        page: parseInt(page),
+        pages: Math.ceil(total / limit),
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
 };
 
-// Get single event
-exports.getEventById = async (req, res) => {
-    try {
-        const event = await Event.findById(req.params.id)
-            .populate('creator', 'name email')
-            .populate('participants', 'name email');
+// @desc    Get single event
+// @route   GET /api/events/:id
+// @access  Public
+const getEvent = async (req, res) => {
+  try {
+    const event = await Event.findById(req.params.id)
+      .populate("creator", "name email")
+      .populate("participants", "name email");
 
-        if (!event) {
-            return res.status(404).json({
-                success: false,
-                message: 'Event not found'
-            });
-        }
-
-        return res.status(200).json({
-            success: true,
-            data: event
-        });
-    } catch (error) {
-        console.error('Error fetching event:', error);
-        return res.status(500).json({
-            success: false,
-            message: 'Error fetching event',
-            error: error.message
-        });
+    if (!event) {
+      return res.status(404).json({
+        success: false,
+        message: "Event not found",
+      });
     }
+
+    res.json({
+      success: true,
+      data: event,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
 };
 
+// @desc    Join an event
+// @route   POST /api/events/:id/join
+// @access  Private
+const joinEvent = async (req, res) => {
+  try {
+    const event = await Event.findById(req.params.id);
 
-
-exports.updateEvent = async (req, res) => {
-    try {
-        console.log('Update request received:', {
-            eventId: req.params.id,
-            body: req.body,
-            user: req.user
-        });
-
-        // Validate event ID
-        if (!req.params.id) {
-            return res.status(400).json({
-                success: false,
-                message: 'Event ID is required'
-            });
-        }
-
-        // Find event
-        const event = await Event.findById(req.params.id);
-        console.log('Found event:', event);
-
-        if (!event) {
-            return res.status(404).json({
-                success: false,
-                message: 'Event not found'
-            });
-        }
-
-        // Check authorization
-        if (event.creator.toString() !== req.user.userId) {
-            return res.status(403).json({
-                success: false,
-                message: 'Not authorized to update this event'
-            });
-        }
-
-        // Update event
-        const updatedEvent = await Event.findByIdAndUpdate(
-            req.params.id,
-            {
-                $set: {
-                    title: req.body.title,
-                    description: req.body.description,
-                    status: req.body.status,
-                    location: req.body.location
-                }
-            },
-            { new: true }
-        ).populate('creator', 'name email')
-            .populate('participants', 'name email');
-
-        console.log('Updated event:', updatedEvent);
-
-        return res.status(200).json({
-            success: true,
-            message: 'Event updated successfully',
-            data: updatedEvent
-        });
-
-    } catch (error) {
-        console.error('Update error:', error);
-        return res.status(500).json({
-            success: false,
-            message: 'Error updating event',
-            error: error.message
-        });
+    if (!event) {
+      return res.status(404).json({
+        success: false,
+        message: "Event not found",
+      });
     }
+
+    // Check if user can join
+    if (!event.canJoin(req.user._id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Cannot join this event",
+      });
+    }
+
+    // Add user to participants
+    event.participants.push(req.user._id);
+    await event.save();
+
+    // Add event to user's joined events
+    await User.findByIdAndUpdate(req.user._id, {
+      $push: { joinedEvents: event._id },
+    });
+
+    res.json({
+      success: true,
+      data: event,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
 };
 
-// Join event
-exports.joinEvent = async (req, res) => {
-    try {
-        const event = await Event.findById(req.params.id);
+// @desc    Update event
+// @route   PUT /api/events/:id
+// @access  Private
+const updateEvent = async (req, res) => {
+  try {
+    const event = await Event.findById(req.params.id);
 
-        if (!event) {
-            return res.status(404).json({
-                success: false,
-                message: 'Event not found'
-            });
-        }
-
-        // Check if user is already a participant
-        if (event.participants.includes(req.user.userId)) {
-            return res.status(400).json({
-                success: false,
-                message: 'Already joined this event'
-            });
-        }
-
-        // Add user to participants
-        event.participants.push(req.user.userId);
-        await event.save();
-
-        // Populate participant details
-        await event.populate('participants', 'name email');
-
-        return res.status(200).json({
-            success: true,
-            message: 'Successfully joined event',
-            data: event
-        });
-    } catch (error) {
-        console.error('Error joining event:', error);
-        return res.status(500).json({
-            success: false,
-            message: 'Error joining event',
-            error: error.message
-        });
+    if (!event) {
+      return res.status(404).json({
+        success: false,
+        message: "Event not found",
+      });
     }
+
+    // Check if user is the creator
+    if (event.creator.toString() !== req.user._id.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: "Not authorized to update this event",
+      });
+    }
+
+    // Update fields
+    Object.keys(req.body).forEach((key) => {
+      event[key] = req.body[key];
+    });
+
+    await event.save();
+
+    res.json({
+      success: true,
+      data: event,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
 };
 
+// @desc    Delete event
+// @route   DELETE /api/events/:id
+// @access  Private
+const deleteEvent = async (req, res) => {
+  try {
+    const event = await Event.findById(req.params.id);
 
+    if (!event) {
+      return res.status(404).json({
+        success: false,
+        message: "Event not found",
+      });
+    }
 
+    // Check if user is the creator
+    if (event.creator.toString() !== req.user._id.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: "Not authorized to delete this event",
+      });
+    }
+
+    // Remove event from users' joined events
+    await User.updateMany(
+      { joinedEvents: event._id },
+      { $pull: { joinedEvents: event._id } }
+    );
+
+    // Remove event from creator's created events
+    await User.findByIdAndUpdate(req.user._id, {
+      $pull: { createdEvents: event._id },
+    });
+
+    await event.remove();
+
+    res.json({
+      success: true,
+      message: "Event deleted successfully",
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// @desc    Get user's events (created and joined)
+// @route   GET /api/events/user/me
+// @access  Private
+const getUserEvents = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id)
+      .populate("createdEvents")
+      .populate("joinedEvents");
+
+    res.json({
+      success: true,
+      data: {
+        createdEvents: user.createdEvents,
+        joinedEvents: user.joinedEvents,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+module.exports = {
+  createEvent,
+  getEvents,
+  getEvent,
+  joinEvent,
+  updateEvent,
+  deleteEvent,
+  getUserEvents,
+};

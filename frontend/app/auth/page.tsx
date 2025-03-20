@@ -49,6 +49,12 @@ export default function AuthPage() {
       newErrors.password = "Password must be at least 6 characters";
     }
 
+    // Show toast for validation errors
+    if (Object.keys(newErrors).length > 0) {
+      const errorMessages = Object.values(newErrors).join(", ");
+      toast.error(errorMessages);
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -76,14 +82,12 @@ export default function AuthPage() {
     }
 
     setIsLoading(true);
+    toast.loading(isLogin ? "Logging in..." : "Creating your account...");
 
     try {
       const endpoint = isLogin
         ? "http://localhost:5000/api/auth/login"
         : "http://localhost:5000/api/auth/register";
-
-      console.log("Submitting to:", endpoint);
-      console.log("Form data:", formData);
 
       const response = await fetch(endpoint, {
         method: "POST",
@@ -98,31 +102,55 @@ export default function AuthPage() {
         data = await response.json();
       } catch (parseError) {
         console.error("Error parsing response:", parseError);
-        throw new Error("Invalid response from server");
+        toast.error("Server response was not in the expected format");
+        return;
       }
 
-      console.log("Response data:", data);
-
       if (!response.ok) {
-        throw new Error(data.message || "Authentication failed");
+        // Handle specific error cases
+        if (response.status === 400) {
+          if (data.errors) {
+            // Validation errors from backend
+            const errorMessages = data.errors
+              .map((err: any) => err.msg)
+              .join(", ");
+            toast.error(errorMessages);
+          } else {
+            toast.error(data.message || "Validation failed");
+          }
+        } else if (response.status === 401) {
+          toast.error("Invalid credentials");
+        } else if (response.status === 409) {
+          toast.error("Email already exists");
+        } else {
+          toast.error(data.message || "Authentication failed");
+        }
+        return;
       }
 
       if (!data.data || !data.data.token) {
-        throw new Error("Invalid response format");
+        toast.error("Invalid response from server");
+        return;
       }
 
       // Store token and user data
       localStorage.setItem("token", data.data.token);
       localStorage.setItem("user", JSON.stringify(data.data.user));
 
-      toast.success(isLogin ? "Login successful!" : "Registration successful!");
+      toast.success(
+        isLogin
+          ? "Welcome back! 👋"
+          : "Welcome to HandsOn! Please check your email to verify your account."
+      );
 
       // Redirect to dashboard
       router.push("/dashboard");
     } catch (error) {
       console.error("Auth error:", error);
       toast.error(
-        error instanceof Error ? error.message : "Authentication failed"
+        error instanceof Error
+          ? error.message
+          : "Unable to connect to the server. Please try again later."
       );
     } finally {
       setIsLoading(false);
